@@ -1,0 +1,63 @@
+import os
+import sys
+import queue
+import sounddevice as sd
+import select  # Import select for non-blocking input
+from vosk import Model, KaldiRecognizer
+
+# Path to the Vosk model directory
+MODEL_PATH = "vosk-model-small-en-us-0.15"
+
+# Ensure the model directory exists
+if not os.path.exists(MODEL_PATH):
+    print(f"Please download the model from https://alphacephei.com/vosk/models and unpack it as '{MODEL_PATH}' in the current folder.")
+    sys.exit(1)
+
+# Load the Vosk model
+model = Model(MODEL_PATH)
+
+# Initialize the recognizer
+recognizer = KaldiRecognizer(model, 16000)
+
+# Create a queue to store audio data
+audio_queue = queue.Queue()
+
+# Variable to store the final line of text
+final_line = ""
+
+def audio_callback(indata, frames, time, status):
+    if status:
+        print(f"Audio callback status: {status}", file=sys.stderr)
+    audio_queue.put(bytes(indata))
+
+def main():
+    global final_line
+    print("Listening... Speak into the microphone. Type anything and press ENTER to return the line.")
+
+    try:
+        with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
+                               channels=1, callback=audio_callback):
+            while True:
+                data = audio_queue.get()
+                if recognizer.AcceptWaveform(data):
+                    result = recognizer.Result()
+                    print("Result:", result)
+                    final_line = result  # Store the final result
+                else:
+                    partial_result = recognizer.PartialResult()
+                    print("Partial result:", partial_result)
+
+                # Check if there is input from the terminal
+                if select.select([sys.stdin], [], [], 0)[0]:
+                    user_input = sys.stdin.readline().strip()  # Read the input
+                    if user_input:  # If the user typed something
+                        print("Final line:", final_line)
+                        final_line = ""  # Reset the final line
+                        print("Listening... Speak into the microphone. Type anything and press ENTER to return the line.")
+    except KeyboardInterrupt:
+        print("\nExiting...")
+    except Exception as e:
+        print(f"An error occurred: {e}", file=sys.stderr)
+
+if __name__ == "__main__":
+    main()

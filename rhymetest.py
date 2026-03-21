@@ -17,7 +17,6 @@ def find_rhymes(word):
     else:
         return "Word not found in cmudict."
 
-print(find_rhymes("cat"))
 
 def find_words_with_primary_stress(stress_pattern):
     """
@@ -37,6 +36,9 @@ def find_words_with_primary_stress(stress_pattern):
             if stresses == stress_pattern:
                 matches.append(word)
     return matches
+
+#rhyme test example
+print(find_rhymes("cat"))
 
 # Example: Find words with primary stress on the first syllable followed by unstressed syllables
 pattern = ['1', '0']
