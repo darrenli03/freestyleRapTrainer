@@ -1,7 +1,10 @@
 from nltk.corpus import cmudict
+from syllable import syllabify
+from random import shuffle
 
 # Load the CMU Pronouncing Dictionary
 d = cmudict.dict()
+target_word = "theory"
 
 def find_rhymes(word):
     word = word.lower()
@@ -16,8 +19,6 @@ def find_rhymes(word):
         return set(rhymes)
     else:
         return "Word not found in cmudict."
-
-print(find_rhymes("cat"))
 
 def find_words_with_primary_stress(stress_pattern):
     """
@@ -37,6 +38,20 @@ def find_words_with_primary_stress(stress_pattern):
             if stresses == stress_pattern:
                 matches.append(word)
     return matches
+
+phones = d[target_word][0]
+print(target_word, phones)
+
+print("syllables:", syllabify(phones))
+
+rhymes = find_rhymes(target_word)
+print("found", len(rhymes), "rhymes")
+
+if len(rhymes) > 20:
+    print(list(rhymes)[-20:])
+else:
+    print(rhymes)
+
 
 # Example: Find words with primary stress on the first syllable followed by unstressed syllables
 pattern = ['1', '0']
