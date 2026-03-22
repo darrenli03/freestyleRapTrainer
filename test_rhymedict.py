@@ -6,6 +6,7 @@ from rhymedict import (
     generate_pattern_variations,
     RhymeIndex,
     get_index,
+    random_diverse_rhymes,
 )
 
 
@@ -246,6 +247,58 @@ class TestPerformance:
         assert queries_per_sec > 100000, (
             f"Cache too slow: {queries_per_sec:.0f} queries/sec"
         )
+
+
+class TestRandomDiverseRhymes:
+    def test_returns_list_of_tuples(self):
+        result = random_diverse_rhymes("cat", n=5)
+        assert isinstance(result, list)
+        assert all(isinstance(item, tuple) and len(item) == 3 for item in result)
+
+    def test_excludes_input_word(self):
+        result = random_diverse_rhymes("cat", n=20)
+        words = [w for w, _, _ in result]
+        assert "cat" not in words
+
+    def test_excludes_specified_words(self):
+        exclude = {"hat", "bat", "flat"}
+        result = random_diverse_rhymes("cat", exclude=exclude, n=5)
+        words = [w for w, _, _ in result]
+        assert "hat" not in words
+        assert "bat" not in words
+        assert "flat" not in words
+
+    def test_limit_parameter(self):
+        result = random_diverse_rhymes("cat", n=5)
+        assert len(result) <= 5
+
+    def test_returns_different_results_across_calls(self):
+        words1 = random_diverse_rhymes("cat", n=10)
+        words2 = random_diverse_rhymes("cat", n=10)
+        assert words1 != words2, "Results should vary across calls due to shuffling"
+
+    def test_handles_exclude_removing_all_candidates(self):
+        exclude = {"hat", "bat", "flat", "chat", "back", "that", "at", "what", "attack"}
+        result = random_diverse_rhymes("cat", exclude=exclude, n=5)
+        words = [w for w, _, _ in result]
+        assert "cat" not in words
+        for w in exclude:
+            assert w not in words
+
+    def test_rhyme_scores_included(self):
+        result = random_diverse_rhymes("cat", n=5)
+        for word, rhyme_score_val, freq in result:
+            assert 0.0 <= rhyme_score_val <= 1.0
+            assert freq >= 0
+
+    def test_word_not_in_dictionary(self):
+        result = random_diverse_rhymes("xyzzyznotaword")
+        assert result == []
+
+    def test_min_score_filtering(self):
+        result = random_diverse_rhymes("cat", n=50, min_score=0.8)
+        for word, rhyme_score_val, freq in result:
+            assert rhyme_score_val >= 0.8
 
 
 if __name__ == "__main__":

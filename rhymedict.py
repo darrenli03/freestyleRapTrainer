@@ -1,5 +1,6 @@
 from functools import lru_cache
 import nltk
+import random
 from nltk.corpus import cmudict
 from rhymescore import rhyme_score, is_vowel, SIMILARITY_GROUPS
 
@@ -253,3 +254,55 @@ def diverse_rhymes(
     scored_candidates.sort(key=lambda x: -x[3])
 
     return [(w, s, f) for w, s, f, _ in scored_candidates[:n]]
+
+
+def random_diverse_rhymes(
+    word: str,
+    exclude: set[str] | None = None,
+    n: int = 5,
+    min_score: float = 0.5,
+    freq_weight: float = 0.3,
+    pool_size: int = 50,
+) -> list[tuple[str, float, int]]:
+    """
+    Find diverse rhyming words with randomness and exclusion support.
+
+    Combines rhyme score with word frequency, shuffles results to introduce
+    variety, and excludes previously-returned words to keep suggestions fresh.
+
+    Args:
+        word: The word to find rhymes for.
+        exclude: Set of words to exclude from results.
+        n: Maximum number of rhymes to return.
+        min_score: Minimum rhyme score threshold (0.0 to 1.0).
+        freq_weight: Blend factor for frequency (0.0=rhymes only, 1.0=freq only).
+        pool_size: Number of top candidates to consider before shuffling.
+
+    Returns:
+        List of (word, rhyme_score, frequency) tuples.
+        Excludes the input word and any words in exclude set.
+    """
+    exclude = exclude if exclude is not None else set()
+    candidates = find_rhymes(word, min_score=min_score, limit=None)
+    if not candidates:
+        return []
+
+    freq_dist = get_frequency_dist()
+    max_freq = max(freq_dist.values()) if freq_dist else 1
+
+    filtered = [(w, s) for w, s in candidates if w != word and w not in exclude]
+    if not filtered:
+        return []
+
+    scored_candidates = []
+    for rhyme_word, rhyme_score_val in filtered:
+        freq = freq_dist.get(rhyme_word, 0)
+        freq_log = freq / (max_freq + 1)
+        combined = (1 - freq_weight) * rhyme_score_val + freq_weight * freq_log
+        scored_candidates.append((rhyme_word, rhyme_score_val, freq, combined))
+
+    scored_candidates.sort(key=lambda x: -x[3])
+    pool = scored_candidates[:pool_size]
+    random.shuffle(pool)
+
+    return [(w, s, f) for w, s, f, _ in pool[:n]]
