@@ -7,6 +7,10 @@ from rhymedict import (
     RhymeIndex,
     get_index,
     random_diverse_rhymes,
+    get_word_phonemes,
+    get_line_rhyme_tail,
+    find_rhymes_by_phonemes,
+    random_diverse_rhymes_by_phonemes,
 )
 
 
@@ -299,6 +303,90 @@ class TestRandomDiverseRhymes:
         result = random_diverse_rhymes("cat", n=50, min_score=0.8)
         for word, rhyme_score_val, freq in result:
             assert rhyme_score_val >= 0.8
+
+
+class TestGetWordPhonemes:
+    def test_returns_phoneme_list(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        assert isinstance(phones, list)
+        assert len(phones) > 0
+
+    def test_word_not_found_returns_none(self):
+        phones = get_word_phonemes("xyzzyznotaword")
+        assert phones is None
+
+    def test_phonemes_match_rhyme_tail(self):
+        phones = get_word_phonemes("cat")
+        tail = get_rhyme_tail(phones)
+        assert tail == ("AE1", "T")
+
+
+class TestGetLineRhymeTail:
+    def test_single_word(self):
+        phones = get_word_phonemes("cat")
+        assert isinstance(phones, list)
+        tail = get_line_rhyme_tail(["cat"], n=1)
+        assert tail == get_rhyme_tail(phones)  # type: ignore[arg-type]
+
+    def test_multiple_words(self):
+        tail = get_line_rhyme_tail(["locking", "in"], n=2)
+        assert tail is not None
+        assert isinstance(tail, tuple)
+        assert len(tail) >= 2
+
+    def test_insufficient_syllables_returns_none(self):
+        tail = get_line_rhyme_tail(["in"], n=3)
+        assert tail is None
+
+
+class TestFindRhymesByPhonemes:
+    def test_returns_list_of_tuples(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        result = find_rhymes_by_phonemes(tuple(phones))
+        assert isinstance(result, list)
+        assert all(isinstance(item, tuple) and len(item) == 2 for item in result)
+
+    def test_sorted_by_score_descending(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        result = find_rhymes_by_phonemes(tuple(phones), limit=100)
+        scores = [score for _, score in result]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_includes_common_rhymes(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        result = find_rhymes_by_phonemes(tuple(phones), min_score=0.8)
+        words = [w for w, _ in result]
+        assert any(w in ["hat", "bat", "flat", "that"] for w in words)
+
+
+class TestRandomDiverseRhymesByPhonemes:
+    def test_returns_list_of_tuples(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        result = random_diverse_rhymes_by_phonemes(tuple(phones), n=5)
+        assert isinstance(result, list)
+        assert all(isinstance(item, tuple) and len(item) == 3 for item in result)
+
+    def test_excludes_specified_words(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        exclude = {"hat", "bat", "flat"}
+        result = random_diverse_rhymes_by_phonemes(tuple(phones), exclude=exclude, n=5)
+        words = [w for w, _, _ in result]
+        assert "hat" not in words
+        assert "bat" not in words
+        assert "flat" not in words
+
+    def test_returns_different_results_across_calls(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        words1 = random_diverse_rhymes_by_phonemes(tuple(phones), n=10)
+        words2 = random_diverse_rhymes_by_phonemes(tuple(phones), n=10)
+        assert words1 != words2
 
 
 if __name__ == "__main__":

@@ -8,267 +8,335 @@ from tkinter import messagebox
 import sounddevice as sd
 from vosk import KaldiRecognizer, Model
 
-from rhymedict import diverse_rhymes
+from rhymedict import (
+    find_rhymes,
+    find_rhymes_by_phonemes,
+    get_line_rhyme_tail,
+    get_word_phonemes,
+    random_diverse_rhymes,
+    random_diverse_rhymes_by_phonemes,
+)
 
 
 MODEL_PATHS = [
-	"vosk-model-small-en-us-0.15",
-	"vosk-model-en-us-0.22-lgraph",
+    "vosk-model-small-en-us-0.15",
+    "vosk-model-en-us-0.22-lgraph",
 ]
 
 
 class FreestyleRapTrainerApp:
-	def __init__(self, root: tk.Tk):
-		self.root = root
-		self.root.title("Freestyle Rap Trainer")
-		self.root.geometry("900x500")
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        self.root.title("Freestyle Rap Trainer")
+        self.root.geometry("900x500")
 
-		self.model: Model | None = None
-		self.recognizer: KaldiRecognizer | None = None
-		self.audio_stream: sd.RawInputStream | None = None
-		self.audio_queue: queue.Queue[bytes] = queue.Queue()
+        self.model: Model | None = None
+        self.recognizer: KaldiRecognizer | None = None
+        self.audio_stream: sd.RawInputStream | None = None
+        self.audio_queue: queue.Queue[bytes] = queue.Queue()
 
-		self.current_words: list[str] = []
-		self.partial_words: list[str] = []
+        self.current_words: list[str] = []
+        self.partial_words: list[str] = []
+        self.exclude_words: set[str] = set()
 
-		self.completed_line_var = tk.StringVar(value="Completed line will appear here")
-		self.live_line_var = tk.StringVar(value="")
-		self.rhymes_var = tk.StringVar(value="Rhymes will appear after you commit a line")
-		self.status_var = tk.StringVar(value="Status: Ready")
+        self.completed_line_var = tk.StringVar(value="Completed line will appear here")
+        self.live_line_var = tk.StringVar(value="")
+        self.rhymes_var = tk.StringVar(
+            value="Rhymes will appear after you commit a line"
+        )
+        self.status_var = tk.StringVar(value="Status: Ready")
 
-		self._build_ui()
-		self.root.bind("<Return>", self.commit_line)
-		self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self._build_ui()
+        self.root.bind("<Return>", self.commit_line)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-	def _build_ui(self) -> None:
-		container = tk.Frame(self.root, padx=16, pady=16)
-		container.pack(fill="both", expand=True)
+    def _build_ui(self) -> None:
+        container = tk.Frame(self.root, padx=16, pady=16)
+        container.pack(fill="both", expand=True)
 
-		title = tk.Label(
-			container,
-			text="Freestyle Rap Trainer",
-			font=("Helvetica", 20, "bold"),
-		)
-		title.pack(anchor="w", pady=(0, 12))
+        title = tk.Label(
+            container,
+            text="Freestyle Rap Trainer",
+            font=("Helvetica", 20, "bold"),
+        )
+        title.pack(anchor="w", pady=(0, 12))
 
-		controls = tk.Frame(container)
-		controls.pack(fill="x", pady=(0, 12))
+        controls = tk.Frame(container)
+        controls.pack(fill="x", pady=(0, 12))
 
-		self.start_button = tk.Button(
-			controls,
-			text="Start Recording",
-			command=self.start_recording,
-			width=18,
-		)
-		self.start_button.pack(side="left")
+        self.start_button = tk.Button(
+            controls,
+            text="Start Recording",
+            command=self.start_recording,
+            width=18,
+        )
+        self.start_button.pack(side="left")
 
-		self.stop_button = tk.Button(
-			controls,
-			text="Stop Recording",
-			command=self.stop_recording,
-			width=18,
-			state="disabled",
-		)
-		self.stop_button.pack(side="left", padx=(8, 0))
+        self.stop_button = tk.Button(
+            controls,
+            text="Stop Recording",
+            command=self.stop_recording,
+            width=18,
+            state="disabled",
+        )
+        self.stop_button.pack(side="left", padx=(8, 0))
 
-		instructions = tk.Label(
-			controls,
-			text="Speak your line, then press Enter to lock it in and refresh rhymes.",
-		)
-		instructions.pack(side="left", padx=(12, 0))
+        self.quit_button = tk.Button(
+            controls,
+            text="Quit",
+            command=self.on_close,
+            width=8,
+        )
+        self.quit_button.pack(side="right")
 
-		status = tk.Label(container, textvariable=self.status_var, fg="#444")
-		status.pack(anchor="w", pady=(0, 16))
+        instructions = tk.Label(
+            controls,
+            text="Speak your line, then press Enter to lock it in and refresh rhymes.",
+        )
+        instructions.pack(side="left", padx=(12, 0))
 
-		completed_title = tk.Label(container, text="Completed Line", font=("Helvetica", 14, "bold"))
-		completed_title.pack(anchor="w")
+        status = tk.Label(container, textvariable=self.status_var, fg="#444")
+        status.pack(anchor="w", pady=(0, 16))
 
-		completed_box = tk.Label(
-			container,
-			textvariable=self.completed_line_var,
-			anchor="w",
-			justify="left",
-			wraplength=850,
-			bg="#f3f3f3",
-			padx=10,
-			pady=10,
-		)
-		completed_box.pack(fill="x", pady=(4, 16))
+        completed_title = tk.Label(
+            container, text="Completed Line", font=("Helvetica", 14, "bold")
+        )
+        completed_title.pack(anchor="w")
 
-		live_title = tk.Label(container, text="Current Spoken Line", font=("Helvetica", 14, "bold"))
-		live_title.pack(anchor="w")
+        completed_box = tk.Label(
+            container,
+            textvariable=self.completed_line_var,
+            anchor="w",
+            justify="left",
+            wraplength=850,
+            bg="#f3f3f3",
+            padx=10,
+            pady=10,
+        )
+        completed_box.pack(fill="x", pady=(4, 16))
 
-		live_box = tk.Label(
-			container,
-			textvariable=self.live_line_var,
-			anchor="w",
-			justify="left",
-			wraplength=850,
-			bg="#e9f4ff",
-			padx=10,
-			pady=10,
-		)
-		live_box.pack(fill="x", pady=(4, 16))
+        live_title = tk.Label(
+            container, text="Current Spoken Line", font=("Helvetica", 14, "bold")
+        )
+        live_title.pack(anchor="w")
 
-		rhyme_title = tk.Label(container, text="Suggested Rhymes", font=("Helvetica", 14, "bold"))
-		rhyme_title.pack(anchor="w")
+        live_box = tk.Label(
+            container,
+            textvariable=self.live_line_var,
+            anchor="w",
+            justify="left",
+            wraplength=850,
+            bg="#e9f4ff",
+            padx=10,
+            pady=10,
+        )
+        live_box.pack(fill="x", pady=(4, 16))
 
-		rhyme_box = tk.Label(
-			container,
-			textvariable=self.rhymes_var,
-			anchor="w",
-			justify="left",
-			wraplength=850,
-			bg="#fff5e8",
-			padx=10,
-			pady=10,
-		)
-		rhyme_box.pack(fill="x", pady=(4, 0))
+        rhyme_title = tk.Label(
+            container, text="Suggested Rhymes", font=("Helvetica", 14, "bold")
+        )
+        rhyme_title.pack(anchor="w")
 
-	def _find_model_path(self) -> str | None:
-		for path in MODEL_PATHS:
-			if os.path.exists(path):
-				return path
-		return None
+        rhyme_box = tk.Label(
+            container,
+            textvariable=self.rhymes_var,
+            anchor="w",
+            justify="left",
+            wraplength=850,
+            bg="#fff5e8",
+            padx=10,
+            pady=10,
+        )
+        rhyme_box.pack(fill="x", pady=(4, 0))
 
-	def start_recording(self) -> None:
-		if self.audio_stream is not None:
-			return
+    def _find_model_path(self) -> str | None:
+        for path in MODEL_PATHS:
+            if os.path.exists(path):
+                return path
+        return None
 
-		model_path = self._find_model_path()
-		if model_path is None:
-			messagebox.showerror(
-				"Model Missing",
-				"No Vosk model found. Expected one of: " + ", ".join(MODEL_PATHS),
-			)
-			return
+    def start_recording(self) -> None:
+        if self.audio_stream is not None:
+            return
 
-		try:
-			if self.model is None:
-				self.status_var.set(f"Status: Loading model from {model_path}...")
-				self.root.update_idletasks()
-				self.model = Model(model_path)
+        model_path = self._find_model_path()
+        if model_path is None:
+            messagebox.showerror(
+                "Model Missing",
+                "No Vosk model found. Expected one of: " + ", ".join(MODEL_PATHS),
+            )
+            return
 
-			self.recognizer = KaldiRecognizer(self.model, 16000)
-			print("Model loaded, starting audio stream...")
+        try:
+            if self.model is None:
+                self.status_var.set(f"Status: Loading model from {model_path}...")
+                self.root.update_idletasks()
+                self.model = Model(model_path)
 
-			self.audio_stream = sd.RawInputStream(
-				samplerate=16000,
-				blocksize=8000,
-				dtype="int16",
-				channels=1,
-				callback=self.audio_callback,
-			)
-			self.audio_stream.start()
-			self.start_button.config(state="disabled")
-			self.stop_button.config(state="normal")
-			self.status_var.set("Status: Recording (press Enter to commit current line)")
-			self.root.after(40, self.process_audio_queue)
-		except Exception as exc:
-			self.audio_stream = None
-			messagebox.showerror("Audio Error", f"Could not start recording: {exc}")
-			self.start_button.config(state="normal")
-			self.stop_button.config(state="disabled")
-			self.status_var.set("Status: Ready")
+            self.recognizer = KaldiRecognizer(self.model, 16000)
+            print("Model loaded, starting audio stream...")
 
-	def stop_recording(self) -> None:
-		if self.audio_stream is None:
-			return
+            self.audio_stream = sd.RawInputStream(
+                samplerate=16000,
+                blocksize=8000,
+                dtype="int16",
+                channels=1,
+                callback=self.audio_callback,
+            )
+            self.audio_stream.start()
+            self.start_button.config(state="disabled")
+            self.stop_button.config(state="normal")
+            self.status_var.set(
+                "Status: Recording (press Enter to commit current line)"
+            )
+            self.root.after(40, self.process_audio_queue)
+        except Exception as exc:
+            self.audio_stream = None
+            messagebox.showerror("Audio Error", f"Could not start recording: {exc}")
+            self.start_button.config(state="normal")
+            self.stop_button.config(state="disabled")
+            self.status_var.set("Status: Ready")
 
-		try:
-			self.audio_stream.stop()
-			self.audio_stream.close()
-		except Exception:
-			pass
+    def stop_recording(self) -> None:
+        if self.audio_stream is None:
+            return
 
-		self.audio_stream = None
-		self.start_button.config(state="normal")
-		self.stop_button.config(state="disabled")
-		self.status_var.set("Status: Recording stopped")
+        try:
+            self.audio_stream.stop()
+            self.audio_stream.close()
+        except Exception:
+            pass
 
-	def audio_callback(self, indata, frames, time, status) -> None:
-		if status:
-			# Avoid touching Tk state from callback thread.
-			print(f"Audio callback status: {status}")
-		self.audio_queue.put(bytes(indata))
+        self.audio_stream = None
+        self.start_button.config(state="normal")
+        self.stop_button.config(state="disabled")
+        self.status_var.set("Status: Recording stopped")
+        self.exclude_words = set()
 
-	def _safe_json(self, payload: str) -> dict:
-		try:
-			return json.loads(payload)
-		except json.JSONDecodeError:
-			return {}
+    def audio_callback(self, indata, frames, time, status) -> None:
+        if status:
+            # Avoid touching Tk state from callback thread.
+            print(f"Audio callback status: {status}")
+        self.audio_queue.put(bytes(indata))
 
-	def process_audio_queue(self) -> None:
-		if self.audio_stream is None or self.recognizer is None:
-			return
+    def _safe_json(self, payload: str) -> dict:
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError:
+            return {}
 
-		try:
-			while True:
-				data = self.audio_queue.get_nowait()
-				if self.recognizer.AcceptWaveform(data):
-					result = self._safe_json(self.recognizer.Result())
-					words = result.get("text", "").split()
-					if words:
-						self.current_words.extend(words)
-					self.partial_words = []
-				else:
-					partial = self._safe_json(self.recognizer.PartialResult())
-					self.partial_words = partial.get("partial", "").split()
-		except queue.Empty:
-			pass
+    def process_audio_queue(self) -> None:
+        if self.audio_stream is None or self.recognizer is None:
+            return
 
-		self.live_line_var.set(" ".join(self.current_words + self.partial_words))
-		self.root.after(40, self.process_audio_queue)
+        try:
+            while True:
+                data = self.audio_queue.get_nowait()
+                if self.recognizer.AcceptWaveform(data):
+                    result = self._safe_json(self.recognizer.Result())
+                    words = result.get("text", "").split()
+                    if words:
+                        self.current_words.extend(words)
+                    self.partial_words = []
+                else:
+                    partial = self._safe_json(self.recognizer.PartialResult())
+                    self.partial_words = partial.get("partial", "").split()
+        except queue.Empty:
+            pass
 
-	def _extract_last_word(self, text: str) -> str:
-		words = re.findall(r"[a-zA-Z']+", text.lower())
-		return words[-1] if words else ""
+        self.live_line_var.set(" ".join(self.current_words + self.partial_words))
+        self.root.after(40, self.process_audio_queue)
 
-	def _drain_audio_queue(self) -> None:
-		# Drop any buffered audio so old speech does not leak into the next line.
-		try:
-			while True:
-				self.audio_queue.get_nowait()
-		except queue.Empty:
-			pass
+    def _extract_last_word(self, text: str) -> str:
+        words = re.findall(r"[a-zA-Z']+", text.lower())
+        return words[-1] if words else ""
 
-	def commit_line(self, _event=None) -> None:
-		line_words = self.current_words + self.partial_words
-		if not line_words:
-			return
+    def _drain_audio_queue(self) -> None:
+        # Drop any buffered audio so old speech does not leak into the next line.
+        try:
+            while True:
+                self.audio_queue.get_nowait()
+        except queue.Empty:
+            pass
 
-		completed_line = " ".join(line_words)
-		self.completed_line_var.set(completed_line)
+    def _find_rhyme_source(
+        self, line_words: list[str], min_rhymes: int = 3
+    ) -> tuple[str, tuple[str, ...]] | None:
+        """
+        Find the best phoneme sequence for rhyme lookup.
 
-		last_word = self._extract_last_word(completed_line)
-		rhymes_display = "No rhymes found."
-		if last_word:
-			rhymes = diverse_rhymes(last_word, n=5)
-			if rhymes:
-				words_only = [entry[0] for entry in rhymes]
-				rhymes_display = ", ".join(words_only)
+        Tries progressively more syllables from the end until we find
+        enough rhymes, falling back to the last word alone.
 
-		self.rhymes_var.set(rhymes_display)
+        Args:
+            line_words: List of words in the line.
+            min_rhymes: Minimum number of rhymes needed to accept a source.
 
-		# Clear recognizer/queue state so the next line starts clean after Enter.
-		self._drain_audio_queue()
-		if self.recognizer is not None and hasattr(self.recognizer, "Reset"):
-			self.recognizer.Reset()
+        Returns:
+            Tuple of (last_word, phones) where phones is the phoneme sequence
+            to query, or None if no suitable source found.
+        """
+        if not line_words:
+            return None
 
-		self.current_words = []
-		self.partial_words = []
-		self.live_line_var.set("")
+        last_word = line_words[-1]
+        rhymes = find_rhymes(last_word, min_score=0.5, limit=10)
+        if len(rhymes) >= min_rhymes:
+            phones = get_word_phonemes(last_word)
+            if phones:
+                return (last_word, tuple(phones))
 
-	def on_close(self) -> None:
-		self.stop_recording()
-		self.root.destroy()
+        for n in [2, 3]:
+            tail = get_line_rhyme_tail(line_words, n)
+            if tail:
+                rhymes = find_rhymes_by_phonemes(tail, min_score=0.5, limit=10)
+                if len(rhymes) >= min_rhymes:
+                    return (last_word, tail)
+
+        phones = get_word_phonemes(last_word)
+        return (last_word, tuple(phones)) if phones else None
+
+    def commit_line(self, _event=None) -> None:
+        line_words = self.current_words + self.partial_words
+        if not line_words:
+            return
+
+        completed_line = " ".join(line_words)
+        self.completed_line_var.set(completed_line)
+
+        rhymes_display = "No rhymes found."
+        rhyme_source = self._find_rhyme_source(line_words)
+        if rhyme_source:
+            last_word, phones = rhyme_source
+            rhymes = random_diverse_rhymes_by_phonemes(
+                phones, exclude=self.exclude_words, n=5
+            )
+            if rhymes:
+                words_only = [entry[0] for entry in rhymes]
+                self.exclude_words.update(words_only)
+                rhymes_display = ", ".join(words_only)
+
+        self.rhymes_var.set(rhymes_display)
+
+        # Clear recognizer/queue state so the next line starts clean after Enter.
+        self._drain_audio_queue()
+        if self.recognizer is not None and hasattr(self.recognizer, "Reset"):
+            self.recognizer.Reset()
+
+        self.current_words = []
+        self.partial_words = []
+        self.live_line_var.set("")
+
+    def on_close(self) -> None:
+        self.stop_recording()
+        self.root.destroy()
 
 
 def main() -> None:
-	root = tk.Tk()
-	app = FreestyleRapTrainerApp(root)
-	root.mainloop()
+    root = tk.Tk()
+    app = FreestyleRapTrainerApp(root)
+    root.mainloop()
 
 
 if __name__ == "__main__":
-	main()
+    main()
