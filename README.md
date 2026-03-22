@@ -10,3 +10,4 @@ python -m nltk.downloader cmudict
 
 download the vosk model
 https://alphacephei.com/vosk/models
+model name: vosk-model-en-us-0.22-lgraph
