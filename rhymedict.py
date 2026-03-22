@@ -254,6 +254,7 @@ def get_index() -> RhymeIndex:
     return _index
 
 
+@lru_cache(maxsize=1024)
 def find_rhymes_by_phonemes(
     phones: tuple[str, ...],
     min_score: float = 0.5,
@@ -271,6 +272,22 @@ def find_rhymes_by_phonemes(
         List of (word, score) tuples sorted by score descending.
     """
     return get_index().find_rhymes_by_phonemes(phones, min_score, limit)
+
+
+def prewarm_caches(progress_callback=None) -> None:
+    """
+    Pre-warm all caches for faster first queries.
+
+    Args:
+        progress_callback: Optional callable(status: str) for progress updates.
+    """
+    if progress_callback:
+        progress_callback("Loading rhyme index...")
+    get_index()
+
+    if progress_callback:
+        progress_callback("Loading frequency data...")
+    get_frequency_dist()
 
 
 def diverse_rhymes_by_phonemes(

@@ -2,6 +2,7 @@ import json
 import os
 import queue
 import re
+import threading
 import tkinter as tk
 from tkinter import messagebox
 
@@ -13,6 +14,7 @@ from rhymedict import (
     find_rhymes_by_phonemes,
     get_line_rhyme_tail,
     get_word_phonemes,
+    prewarm_caches,
     random_diverse_rhymes,
     random_diverse_rhymes_by_phonemes,
 )
@@ -44,11 +46,37 @@ class FreestyleRapTrainerApp:
         self.rhymes_var = tk.StringVar(
             value="Rhymes will appear after you commit a line"
         )
-        self.status_var = tk.StringVar(value="Status: Ready")
+        self.status_var = tk.StringVar(value="Status: Loading...")
 
         self._build_ui()
         self.root.bind("<Return>", self.commit_line)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self._prewarm_caches()
+
+    def _prewarm_caches(self) -> None:
+        """Pre-warm rhyme caches in a background thread."""
+
+        def update_status(msg: str) -> None:
+            self.status_var.set(msg)
+            self.root.update_idletasks()
+
+        def warm_caches() -> None:
+            try:
+                prewarm_caches(progress_callback=update_status)
+                self.root.after(
+                    0,
+                    lambda: (
+                        self.status_var.set("Status: Ready"),
+                        self.start_button.config(state="normal"),
+                    ),
+                )
+            except Exception as exc:
+                self.root.after(
+                    0, lambda: self.status_var.set(f"Status: Cache error - {exc}")
+                )
+
+        thread = threading.Thread(target=warm_caches, daemon=True)
+        thread.start()
 
     def _build_ui(self) -> None:
         container = tk.Frame(self.root, padx=16, pady=16)
@@ -69,6 +97,7 @@ class FreestyleRapTrainerApp:
             text="Start Recording",
             command=self.start_recording,
             width=18,
+            state="disabled",
         )
         self.start_button.pack(side="left")
 
@@ -308,12 +337,12 @@ class FreestyleRapTrainerApp:
         rhyme_source = self._find_rhyme_source(line_words)
         if rhyme_source:
             last_word, phones = rhyme_source
+            self.exclude_words.update(last_word)
             rhymes = random_diverse_rhymes_by_phonemes(
-                phones, exclude=self.exclude_words, n=5
+                phones, exclude=self.exclude_words, n=5, freq_weight=0.5
             )
             if rhymes:
                 words_only = [entry[0] for entry in rhymes]
-                self.exclude_words.update(words_only)
                 rhymes_display = ", ".join(words_only)
 
         self.rhymes_var.set(rhymes_display)

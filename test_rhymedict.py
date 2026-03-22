@@ -11,6 +11,8 @@ from rhymedict import (
     get_line_rhyme_tail,
     find_rhymes_by_phonemes,
     random_diverse_rhymes_by_phonemes,
+    diverse_rhymes_by_phonemes,
+    prewarm_caches,
 )
 
 
@@ -387,6 +389,70 @@ class TestRandomDiverseRhymesByPhonemes:
         words1 = random_diverse_rhymes_by_phonemes(tuple(phones), n=10)
         words2 = random_diverse_rhymes_by_phonemes(tuple(phones), n=10)
         assert words1 != words2
+
+
+class TestGetLineRhymeTailEdgeCases:
+    def test_partial_recognition(self):
+        tail = get_line_rhyme_tail(["locking", "xyznotaword"], n=2)
+        assert tail is None
+
+    def test_all_unrecognized_returns_none(self):
+        tail = get_line_rhyme_tail(["xyznotaword", "anotherfake"], n=2)
+        assert tail is None
+
+
+class TestFindRhymesByPhonemesEdgeCases:
+    def test_empty_phonemes(self):
+        result = find_rhymes_by_phonemes(())
+        assert result == []
+
+    def test_single_phoneme(self):
+        result = find_rhymes_by_phonemes(("AE1",))
+        assert isinstance(result, list)
+
+
+class TestDiverseRhymesByPhonemesEdgeCases:
+    def test_empty_phonemes(self):
+        result = diverse_rhymes_by_phonemes(())
+        assert result == []
+
+    def test_single_phoneme(self):
+        result = diverse_rhymes_by_phonemes(("AE1",))
+        assert isinstance(result, list)
+
+
+class TestRandomDiverseRhymesByPhonemesEdgeCases:
+    def test_empty_phonemes(self):
+        result = random_diverse_rhymes_by_phonemes(())
+        assert result == []
+
+    def test_single_phoneme(self):
+        result = random_diverse_rhymes_by_phonemes(("AE1",))
+        assert isinstance(result, list)
+
+    def test_exclude_removes_all_returns_empty(self):
+        phones = get_word_phonemes("cat")
+        assert phones is not None
+        exclude = {"hat", "bat", "flat", "chat", "back", "that", "at", "what"}
+        result = random_diverse_rhymes_by_phonemes(tuple(phones), exclude=exclude, n=5)
+        assert len(result) <= 5
+
+
+class TestPrewarmCaches:
+    def test_prewarm_without_callback(self):
+        prewarm_caches()
+        assert get_index() is not None
+
+    def test_prewarm_with_callback(self):
+        progress_messages = []
+
+        def callback(msg: str) -> None:
+            progress_messages.append(msg)
+
+        prewarm_caches(progress_callback=callback)
+        assert len(progress_messages) >= 2
+        assert any("rhyme" in msg.lower() for msg in progress_messages)
+        assert any("frequency" in msg.lower() for msg in progress_messages)
 
 
 if __name__ == "__main__":
