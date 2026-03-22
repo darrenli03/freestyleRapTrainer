@@ -390,9 +390,13 @@ class FreestyleRapTrainerApp:
         rhyme_source = self._find_rhyme_source(line_words)
         if rhyme_source:
             last_word, phones = rhyme_source
-            self.exclude_words.update(last_word)
+            self.exclude_words.add(last_word)
             rhymes = random_diverse_rhymes_by_phonemes(
-                phones, exclude=self.exclude_words, n=5, freq_weight=0.5
+                phones,
+                exclude=self.exclude_words,
+                n=5,
+                freq_weight=0.5,
+                exclude_word=last_word,
             )
             if rhymes:
                 words_only = [entry[0] for entry in rhymes]

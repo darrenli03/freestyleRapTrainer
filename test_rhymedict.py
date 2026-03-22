@@ -71,9 +71,9 @@ class TestFindRhymes:
         assert result == []
 
     def test_excludes_input_word(self):
-        result = find_rhymes("cat", limit=100)
+        result = find_rhymes("geese", limit=100)
         words = [w for w, _ in result]
-        assert "cat" not in words
+        assert "geese" not in words
 
     def test_sorted_by_score_descending(self):
         result = find_rhymes("cat", limit=100)
@@ -420,6 +420,13 @@ class TestDiverseRhymesByPhonemesEdgeCases:
         result = diverse_rhymes_by_phonemes(("AE1",))
         assert isinstance(result, list)
 
+    def test_excludes_input_word_by_phonemes(self):
+        phones = get_word_phonemes("mike")
+        assert phones is not None
+        result = diverse_rhymes_by_phonemes(tuple(phones), n=20, exclude_word="mike")
+        words = [w for w, _, _ in result]
+        assert "mike" not in words
+
 
 class TestRandomDiverseRhymesByPhonemesEdgeCases:
     def test_empty_phonemes(self):
@@ -436,6 +443,15 @@ class TestRandomDiverseRhymesByPhonemesEdgeCases:
         exclude = {"hat", "bat", "flat", "chat", "back", "that", "at", "what"}
         result = random_diverse_rhymes_by_phonemes(tuple(phones), exclude=exclude, n=5)
         assert len(result) <= 5
+
+    def test_excludes_input_word_by_phonemes(self):
+        phones = get_word_phonemes("mike")
+        assert phones is not None
+        result = random_diverse_rhymes_by_phonemes(
+            tuple(phones), n=20, exclude_word="mike"
+        )
+        words = [w for w, _, _ in result]
+        assert "mike" not in words
 
 
 class TestPrewarmCaches:

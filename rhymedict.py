@@ -295,6 +295,7 @@ def diverse_rhymes_by_phonemes(
     n: int = 5,
     min_score: float = 0.5,
     freq_weight: float = 0.3,
+    exclude_word: str | None = None,
 ) -> list[tuple[str, float, int]]:
     """
     Find diverse rhyming words biased towards common usage.
@@ -307,6 +308,7 @@ def diverse_rhymes_by_phonemes(
         n: Maximum number of rhymes to return.
         min_score: Minimum rhyme score threshold (0.0 to 1.0).
         freq_weight: Blend factor for frequency (0.0=rhymes only, 1.0=freq only).
+        exclude_word: Word to exclude from results (typically the input word).
 
     Returns:
         List of (word, rhyme_score, frequency) tuples sorted by combined score.
@@ -320,6 +322,8 @@ def diverse_rhymes_by_phonemes(
 
     scored_candidates = []
     for rhyme_word, rhyme_score_val in candidates:
+        if exclude_word and rhyme_word == exclude_word:
+            continue
         freq = freq_dist.get(rhyme_word, 0)
         freq_log = freq / (max_freq + 1)
 
@@ -338,6 +342,7 @@ def random_diverse_rhymes_by_phonemes(
     min_score: float = 0.5,
     freq_weight: float = 0.3,
     pool_size: int = 50,
+    exclude_word: str | None = None,
 ) -> list[tuple[str, float, int]]:
     """
     Find diverse rhyming words with randomness and exclusion support.
@@ -352,6 +357,7 @@ def random_diverse_rhymes_by_phonemes(
         min_score: Minimum rhyme score threshold (0.0 to 1.0).
         freq_weight: Blend factor for frequency (0.0=rhymes only, 1.0=freq only).
         pool_size: Number of top candidates to consider before shuffling.
+        exclude_word: Word to exclude from results (typically the input word).
 
     Returns:
         List of (word, rhyme_score, frequency) tuples.
@@ -364,7 +370,7 @@ def random_diverse_rhymes_by_phonemes(
     freq_dist = get_frequency_dist()
     max_freq = max(freq_dist.values()) if freq_dist else 1
 
-    filtered = [(w, s) for w, s in candidates if w not in exclude]
+    filtered = [(w, s) for w, s in candidates if w not in exclude and w != exclude_word]
     if not filtered:
         return []
 
