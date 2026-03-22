@@ -224,6 +224,14 @@ class FreestyleRapTrainerApp:
 		words = re.findall(r"[a-zA-Z']+", text.lower())
 		return words[-1] if words else ""
 
+	def _drain_audio_queue(self) -> None:
+		# Drop any buffered audio so old speech does not leak into the next line.
+		try:
+			while True:
+				self.audio_queue.get_nowait()
+		except queue.Empty:
+			pass
+
 	def commit_line(self, _event=None) -> None:
 		line_words = self.current_words + self.partial_words
 		if not line_words:
@@ -241,6 +249,11 @@ class FreestyleRapTrainerApp:
 				rhymes_display = ", ".join(words_only)
 
 		self.rhymes_var.set(rhymes_display)
+
+		# Clear recognizer/queue state so the next line starts clean after Enter.
+		self._drain_audio_queue()
+		if self.recognizer is not None and hasattr(self.recognizer, "Reset"):
+			self.recognizer.Reset()
 
 		self.current_words = []
 		self.partial_words = []
