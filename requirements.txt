@@ -7,14 +7,17 @@ iniconfig==2.3.0
 joblib==1.5.3
 keyboard==0.13.5
 nltk==3.9.3
+numpy==2.2.3
 packaging==26.0
 pluggy==1.6.0
 pycparser==3.0
 Pygments==2.19.2
 pytest==9.0.2
+pytest-mock==3.14.0
 regex==2026.2.28
 requests==2.32.5
 sounddevice==0.5.5
+soundfile==0.12.1
 srt==3.5.3
 tqdm==4.67.3
 urllib3==2.6.3

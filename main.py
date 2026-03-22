@@ -4,9 +4,11 @@ import queue
 import re
 import threading
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
+import numpy as np
 import sounddevice as sd
+import soundfile as sf
 from vosk import KaldiRecognizer, Model
 
 from rhymedict import (
@@ -40,6 +42,12 @@ class FreestyleRapTrainerApp:
         self.current_words: list[str] = []
         self.partial_words: list[str] = []
         self.exclude_words: set[str] = set()
+
+        self.beat_data: np.ndarray | None = None
+        self.beat_samplerate: int = 44100
+        self.beat_filename: str | None = None
+        self.beat_playing: bool = False
+        self.beat_speed: float = 1.0
 
         self.completed_line_var = tk.StringVar(value="Completed line will appear here")
         self.live_line_var = tk.StringVar(value="")
@@ -125,7 +133,52 @@ class FreestyleRapTrainerApp:
         instructions.pack(side="left", padx=(12, 0))
 
         status = tk.Label(container, textvariable=self.status_var, fg="#444")
-        status.pack(anchor="w", pady=(0, 16))
+        status.pack(anchor="w", pady=(0, 8))
+
+        beat_controls = tk.Frame(container)
+        beat_controls.pack(fill="x", pady=(0, 16))
+
+        beat_label = tk.Label(
+            beat_controls, text="Beat Controls:", font=("Helvetica", 10, "bold")
+        )
+        beat_label.pack(anchor="w")
+
+        beat_row = tk.Frame(beat_controls)
+        beat_row.pack(fill="x", pady=(4, 0))
+
+        self.load_beat_button = tk.Button(
+            beat_row, text="Load Beat", command=self.load_beat, width=10
+        )
+        self.load_beat_button.pack(side="left")
+
+        self.play_beat_button = tk.Button(
+            beat_row, text="Play", command=self.toggle_beat, width=10, state="disabled"
+        )
+        self.play_beat_button.pack(side="left", padx=(8, 0))
+
+        tk.Label(beat_row, text="Speed:").pack(side="left", padx=(16, 4))
+
+        self.speed_slider = tk.Scale(
+            beat_row,
+            from_=0.5,
+            to=1.5,
+            resolution=0.05,
+            orient="horizontal",
+            showvalue=False,
+            width=12,
+            command=self.on_speed_change,
+        )
+        self.speed_slider.set(1.0)
+        self.speed_slider.pack(side="left")
+
+        self.speed_label = tk.Label(beat_row, text="1.00x", width=6)
+        self.speed_label.pack(side="left", padx=(4, 0))
+
+        self.beat_filename_var = tk.StringVar(value="No beat loaded")
+        self.beat_filename_label = tk.Label(
+            beat_row, textvariable=self.beat_filename_var, fg="#666"
+        )
+        self.beat_filename_label.pack(side="left", padx=(16, 0))
 
         completed_title = tk.Label(
             container, text="Completed Line", font=("Helvetica", 14, "bold")
@@ -356,8 +409,82 @@ class FreestyleRapTrainerApp:
         self.partial_words = []
         self.live_line_var.set("")
 
+    def load_beat(self) -> None:
+        """Open file dialog to select audio file."""
+        filename = filedialog.askopenfilename(
+            title="Select Beat",
+            filetypes=[("Audio Files", "*.mp3 *.wav"), ("All Files", "*.*")],
+        )
+        if not filename:
+            return
+
+        try:
+            self.beat_data, self.beat_samplerate = sf.read(filename, dtype="float32")
+            self.beat_filename = filename
+            basename = os.path.basename(filename)
+            self.beat_filename_var.set(basename)
+            self.play_beat_button.config(state="normal")
+        except Exception as exc:
+            messagebox.showerror("Error", f"Could not load audio: {exc}")
+
+    def toggle_beat(self) -> None:
+        """Toggle play/pause."""
+        if self.beat_playing:
+            self._pause_beat()
+        else:
+            self._play_beat()
+
+    def _play_beat(self) -> None:
+        """Start or resume beat playback."""
+        if self.beat_data is None:
+            return
+
+        sd.play(
+            self.beat_data,
+            samplerate=int(self.beat_samplerate * self.beat_speed),
+            loop=True,
+        )
+        self.beat_playing = True
+        self.play_beat_button.config(text="Pause")
+
+        basename = (
+            os.path.basename(self.beat_filename) if self.beat_filename else "beat"
+        )
+        self.beat_filename_var.set(f"{basename} (looping)")
+
+    def _pause_beat(self) -> None:
+        """Pause beat playback."""
+        sd.stop()
+        self.beat_playing = False
+        self.play_beat_button.config(text="Play")
+
+        basename = (
+            os.path.basename(self.beat_filename) if self.beat_filename else "beat"
+        )
+        self.beat_filename_var.set(f"{basename} (paused)")
+
+    def on_speed_change(self, value: str) -> None:
+        """Handle speed slider change."""
+        self.beat_speed = float(value)
+        self.speed_label.config(text=f"{self.beat_speed:.2f}x")
+
+        if self.beat_playing:
+            sd.stop()
+            sd.play(
+                self.beat_data,
+                samplerate=int(self.beat_samplerate * self.beat_speed),
+                loop=True,
+            )
+
+    def _cleanup_beat(self) -> None:
+        """Clean up beat resources on close."""
+        if self.beat_playing:
+            sd.stop()
+        self.beat_data = None
+
     def on_close(self) -> None:
         self.stop_recording()
+        self._cleanup_beat()
         self.root.destroy()
 
 
