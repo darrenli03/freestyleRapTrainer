@@ -158,6 +158,65 @@ class TestDeprecationWarning:
             assert "deprecated" in str(w[0].message).lower()
 
 
+class TestDiverseRhymes:
+    def test_returns_list_of_tuples(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("cat", n=5)
+        assert isinstance(result, list)
+        assert all(isinstance(item, tuple) and len(item) == 3 for item in result)
+
+    def test_excludes_input_word(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("cat", n=20)
+        words = [w for w, _, _ in result]
+        assert "cat" not in words
+
+    def test_limit_parameter(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("cat", n=5)
+        assert len(result) <= 5
+
+    def test_common_words_appear(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("cat", n=5)
+        words = [w for w, _, _ in result]
+        assert "at" in words or "that" in words, "Common words should appear"
+
+    def test_rhyme_scores_included(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("cat", n=5)
+        for word, rhyme_score, freq in result:
+            assert 0.0 <= rhyme_score <= 1.0
+            assert freq >= 0
+
+    def test_freq_weight_affects_results(self):
+        from rhymedict import diverse_rhymes
+
+        result_low = diverse_rhymes("cat", n=5, freq_weight=0.0)
+        result_high = diverse_rhymes("cat", n=5, freq_weight=1.0)
+        words_low = [w for w, _, _ in result_low]
+        words_high = [w for w, _, _ in result_high]
+        assert words_low != words_high, "freq_weight should affect results"
+
+    def test_word_not_in_dictionary(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("xyzzyznotaword")
+        assert result == []
+
+    def test_min_score_filtering(self):
+        from rhymedict import diverse_rhymes
+
+        result = diverse_rhymes("cat", n=50, min_score=0.8)
+        for word, rhyme_score, freq in result:
+            assert rhyme_score >= 0.8
+
+
 class TestPerformance:
     def test_query_speed(self):
         import time
