@@ -52,7 +52,6 @@ if len(rhymes) > 20:
 else:
     print(rhymes)
 
-
 # Example: Find words with primary stress on the first syllable followed by unstressed syllables
 pattern = ['1', '0']
 matching_words = find_words_with_primary_stress(pattern)
