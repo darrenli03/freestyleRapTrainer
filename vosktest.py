@@ -6,7 +6,8 @@ import select  # Import select for non-blocking input
 from vosk import Model, KaldiRecognizer
 
 # Path to the Vosk model directory
-MODEL_PATH = "vosk-model-en-us-0.22-lgraph"
+# MODEL_PATH = "vosk-model-en-us-0.22-lgraph"
+MODEL_PATH = "vosk-model-small-en-us-0.15"  # smaller model
 
 # Ensure the model directory exists
 if not os.path.exists(MODEL_PATH):

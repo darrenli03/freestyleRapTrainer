@@ -100,3 +100,5 @@ celerybeat-schedule
 
 # Cython debug symbols
 cython_debug/
+
+vosk-model-*
